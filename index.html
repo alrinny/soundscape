@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soundscape — Generative Ambient</title>
+<style>
+:root {
+  --color-primary: #4a6cf7;
+  --color-secondary: #8b5cf6;
+  --color-accent: #c084fc;
+  --color-bg: #05050f;
+  --ui-bg: rgba(10, 10, 20, 0.85);
+  --ui-border: rgba(255, 255, 255, 0.08);
+  --text: #e2e8f0;
+  --text-dim: #94a3b8;
+  --transition: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--color-bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  transition: background var(--transition);
+}
+
+#visualCanvas {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+}
+
+.ui-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+
+.ui-overlay > * { pointer-events: auto; }
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 28px;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.4), transparent);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-icon {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  transition: background var(--transition);
+}
+
+.logo-text {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.logo-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.header-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+#timer {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 14px;
+  color: var(--text);
+}
+
+#status {
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-border);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Center area — biome info */
+.center-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+#biomeTitle {
+  font-size: 28px;
+  font-weight: 300;
+  letter-spacing: 1px;
+  text-shadow: 0 2px 20px rgba(0,0,0,0.5);
+  opacity: 0.7;
+  transition: opacity 0.3s;
+}
+
+#biomeDesc {
+  font-size: 14px;
+  color: var(--text-dim);
+  margin-top: 8px;
+  text-shadow: 0 1px 10px rgba(0,0,0,0.5);
+  opacity: 0.5;
+  transition: opacity 0.3s;
+}
+
+/* Bottom controls */
+.controls {
+  padding: 20px 28px;
+  background: linear-gradient(to top, rgba(0,0,0,0.5), transparent);
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+}
+
+/* Biome selector */
+.biome-selector {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.biome-btn {
+  width: 52px; height: 52px;
+  border-radius: 14px;
+  border: 1px solid var(--ui-border);
+  background: var(--ui-bg);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+  position: relative;
+  overflow: hidden;
+}
+
+.biome-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.biome-btn.active::before { opacity: 0.3; }
+.biome-btn.active { border-color: var(--color-primary); }
+.biome-btn:hover { border-color: var(--color-primary); transform: translateY(-2px); }
+
+.biome-btn .biome-icon {
+  font-size: 20px;
+  position: relative;
+  z-index: 1;
+}
+
+.biome-btn .biome-label {
+  font-size: 8px;
+  color: var(--text-dim);
+  position: relative;
+  z-index: 1;
+  margin-top: 2px;
+  letter-spacing: 0.5px;
+}
+
+.biome-btn .biome-key {
+  position: absolute;
+  top: 3px; right: 5px;
+  font-size: 8px;
+  color: var(--text-dim);
+  opacity: 0.4;
+  z-index: 1;
+}
+
+/* Play button */
+.play-area {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+#playBtn {
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  border: 2px solid var(--color-primary);
+  background: var(--ui-bg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+  position: relative;
+}
+
+#playBtn:hover {
+  background: var(--color-primary);
+  transform: scale(1.05);
+}
+
+#playBtn.playing { border-color: var(--color-accent); }
+#playBtn.playing:hover { background: var(--color-accent); }
+
+.play-icon {
+  font-size: 20px;
+  margin-left: 2px;
+}
+
+#playBtn.playing .play-icon { margin-left: 0; }
+
+/* Sliders */
+.sliders {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.slider-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  width: 60px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.slider-value {
+  font-size: 11px;
+  color: var(--text-dim);
+  width: 35px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+input[type="range"] {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.1);
+  outline: none;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  border: 2px solid rgba(255,255,255,0.2);
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  background: var(--color-accent);
+}
+
+/* Keyboard hints */
+.shortcuts {
+  position: fixed;
+  bottom: 90px;
+  right: 28px;
+  font-size: 10px;
+  color: var(--text-dim);
+  opacity: 0.4;
+  text-align: right;
+  line-height: 1.6;
+  pointer-events: none;
+}
+
+.shortcuts kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.05);
+  font-family: inherit;
+  font-size: 10px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .controls { flex-direction: column; align-items: stretch; gap: 12px; padding: 16px; }
+  .biome-selector { justify-content: center; flex-wrap: wrap; }
+  .biome-btn { width: 46px; height: 46px; }
+  .play-area { justify-content: center; }
+  .shortcuts { display: none; }
+  .header { padding: 12px 16px; }
+  .logo-text { font-size: 15px; }
+  #biomeTitle { font-size: 22px; }
+  .biome-btn .biome-key { display: none; }
+}
+
+@media (max-width: 480px) {
+  .biome-btn { width: 42px; height: 42px; border-radius: 10px; }
+  .biome-btn .biome-icon { font-size: 16px; }
+  .biome-btn .biome-label { display: none; }
+}
+
+/* Initial animate in */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.header { animation: fadeIn 0.6s ease-out 0.2s both; }
+.center-area { animation: fadeIn 0.6s ease-out 0.4s both; }
+.controls { animation: fadeIn 0.6s ease-out 0.6s both; }
+</style>
+</head>
+<body>
+
+<canvas id="visualCanvas"></canvas>
+
+<div class="ui-overlay">
+  <!-- Header -->
+  <div class="header">
+    <div class="logo">
+      <div class="logo-icon">🎧</div>
+      <div>
+        <div class="logo-text">Soundscape</div>
+        <div class="logo-sub">Generative Ambient</div>
+      </div>
+    </div>
+    <div class="header-info">
+      <span id="timer">00:00</span>
+      <span id="status">Ready</span>
+    </div>
+  </div>
+
+  <!-- Center — biome title -->
+  <div class="center-area">
+    <div id="biomeTitle">🌌 Deep Space</div>
+    <div id="biomeDesc">Vast cosmic drones, distant radio signals, the sound of nothing</div>
+  </div>
+
+  <!-- Bottom controls -->
+  <div class="controls">
+    <div class="biome-selector">
+      <button class="biome-btn active" id="biome-deepSpace">
+        <span class="biome-key">1</span>
+        <span class="biome-icon">🌌</span>
+        <span class="biome-label">Space</span>
+      </button>
+      <button class="biome-btn" id="biome-rainyNight">
+        <span class="biome-key">2</span>
+        <span class="biome-icon">🌧️</span>
+        <span class="biome-label">Rain</span>
+      </button>
+      <button class="biome-btn" id="biome-digitalForest">
+        <span class="biome-key">3</span>
+        <span class="biome-icon">🌲</span>
+        <span class="biome-label">Forest</span>
+      </button>
+      <button class="biome-btn" id="biome-cyberpunkCity">
+        <span class="biome-key">4</span>
+        <span class="biome-icon">🏙️</span>
+        <span class="biome-label">Cyber</span>
+      </button>
+      <button class="biome-btn" id="biome-oceanDepths">
+        <span class="biome-key">5</span>
+        <span class="biome-icon">🐋</span>
+        <span class="biome-label">Ocean</span>
+      </button>
+      <button class="biome-btn" id="biome-midnightLibrary">
+        <span class="biome-key">6</span>
+        <span class="biome-icon">📚</span>
+        <span class="biome-label">Library</span>
+      </button>
+    </div>
+
+    <div class="play-area">
+      <button id="playBtn"><span class="play-icon">▶</span></button>
+    </div>
+
+    <div class="sliders">
+      <div class="slider-row">
+        <span class="slider-label">Volume</span>
+        <input type="range" id="volumeSlider" min="0" max="100" value="70">
+        <span class="slider-value" id="volumeValue">70%</span>
+      </div>
+      <div class="slider-row">
+        <span class="slider-label">Intensity</span>
+        <input type="range" id="intensitySlider" min="0" max="100" value="50">
+        <span class="slider-value" id="intensityValue">50%</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="shortcuts">
+  <kbd>Space</kbd> play/pause &nbsp; <kbd>M</kbd> mute<br>
+  <kbd>1</kbd>-<kbd>6</kbd> switch biome
+</div>
+
+<script>
+// === INLINE: audio-engine.js ===
+%%AUDIO_ENGINE%%
+
+// === INLINE: biomes.js ===
+%%BIOMES%%
+
+// === INLINE: visuals.js ===
+%%VISUALS%%
+
+// === INLINE: ui.js ===
+%%UI%%
+</script>
+
+</body>
+</html>

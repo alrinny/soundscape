@@ -1,0 +1,1827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soundscape — Generative Ambient</title>
+<style>
+:root {
+  --color-primary: #4a6cf7;
+  --color-secondary: #8b5cf6;
+  --color-accent: #c084fc;
+  --color-bg: #05050f;
+  --ui-bg: rgba(10, 10, 20, 0.85);
+  --ui-border: rgba(255, 255, 255, 0.08);
+  --text: #e2e8f0;
+  --text-dim: #94a3b8;
+  --transition: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--color-bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  transition: background var(--transition);
+}
+
+#visualCanvas {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+}
+
+.ui-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+
+.ui-overlay > * { pointer-events: auto; }
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 28px;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.4), transparent);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-icon {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  transition: background var(--transition);
+}
+
+.logo-text {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.logo-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.header-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+#timer {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 14px;
+  color: var(--text);
+}
+
+#status {
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-border);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Center area — biome info */
+.center-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+#biomeTitle {
+  font-size: 28px;
+  font-weight: 300;
+  letter-spacing: 1px;
+  text-shadow: 0 2px 20px rgba(0,0,0,0.5);
+  opacity: 0.7;
+  transition: opacity 0.3s;
+}
+
+#biomeDesc {
+  font-size: 14px;
+  color: var(--text-dim);
+  margin-top: 8px;
+  text-shadow: 0 1px 10px rgba(0,0,0,0.5);
+  opacity: 0.5;
+  transition: opacity 0.3s;
+}
+
+/* Bottom controls */
+.controls {
+  padding: 20px 28px;
+  background: linear-gradient(to top, rgba(0,0,0,0.5), transparent);
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+}
+
+/* Biome selector */
+.biome-selector {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.biome-btn {
+  width: 52px; height: 52px;
+  border-radius: 14px;
+  border: 1px solid var(--ui-border);
+  background: var(--ui-bg);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+  position: relative;
+  overflow: hidden;
+}
+
+.biome-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.biome-btn.active::before { opacity: 0.3; }
+.biome-btn.active { border-color: var(--color-primary); }
+.biome-btn:hover { border-color: var(--color-primary); transform: translateY(-2px); }
+
+.biome-btn .biome-icon {
+  font-size: 20px;
+  position: relative;
+  z-index: 1;
+}
+
+.biome-btn .biome-label {
+  font-size: 8px;
+  color: var(--text-dim);
+  position: relative;
+  z-index: 1;
+  margin-top: 2px;
+  letter-spacing: 0.5px;
+}
+
+.biome-btn .biome-key {
+  position: absolute;
+  top: 3px; right: 5px;
+  font-size: 8px;
+  color: var(--text-dim);
+  opacity: 0.4;
+  z-index: 1;
+}
+
+/* Play button */
+.play-area {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+#playBtn {
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  border: 2px solid var(--color-primary);
+  background: var(--ui-bg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+  position: relative;
+}
+
+#playBtn:hover {
+  background: var(--color-primary);
+  transform: scale(1.05);
+}
+
+#playBtn.playing { border-color: var(--color-accent); }
+#playBtn.playing:hover { background: var(--color-accent); }
+
+.play-icon {
+  font-size: 20px;
+  margin-left: 2px;
+}
+
+#playBtn.playing .play-icon { margin-left: 0; }
+
+/* Sliders */
+.sliders {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.slider-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  width: 60px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.slider-value {
+  font-size: 11px;
+  color: var(--text-dim);
+  width: 35px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+input[type="range"] {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.1);
+  outline: none;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  border: 2px solid rgba(255,255,255,0.2);
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  background: var(--color-accent);
+}
+
+/* Keyboard hints */
+.shortcuts {
+  position: fixed;
+  bottom: 90px;
+  right: 28px;
+  font-size: 10px;
+  color: var(--text-dim);
+  opacity: 0.4;
+  text-align: right;
+  line-height: 1.6;
+  pointer-events: none;
+}
+
+.shortcuts kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.05);
+  font-family: inherit;
+  font-size: 10px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .controls { flex-direction: column; align-items: stretch; gap: 12px; padding: 16px; }
+  .biome-selector { justify-content: center; flex-wrap: wrap; }
+  .biome-btn { width: 46px; height: 46px; }
+  .play-area { justify-content: center; }
+  .shortcuts { display: none; }
+  .header { padding: 12px 16px; }
+  .logo-text { font-size: 15px; }
+  #biomeTitle { font-size: 22px; }
+  .biome-btn .biome-key { display: none; }
+}
+
+@media (max-width: 480px) {
+  .biome-btn { width: 42px; height: 42px; border-radius: 10px; }
+  .biome-btn .biome-icon { font-size: 16px; }
+  .biome-btn .biome-label { display: none; }
+}
+
+/* Initial animate in */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.header { animation: fadeIn 0.6s ease-out 0.2s both; }
+.center-area { animation: fadeIn 0.6s ease-out 0.4s both; }
+.controls { animation: fadeIn 0.6s ease-out 0.6s both; }
+</style>
+</head>
+<body>
+
+<canvas id="visualCanvas"></canvas>
+
+<div class="ui-overlay">
+  <!-- Header -->
+  <div class="header">
+    <div class="logo">
+      <div class="logo-icon">🎧</div>
+      <div>
+        <div class="logo-text">Soundscape</div>
+        <div class="logo-sub">Generative Ambient</div>
+      </div>
+    </div>
+    <div class="header-info">
+      <span id="timer">00:00</span>
+      <span id="status">Ready</span>
+    </div>
+  </div>
+
+  <!-- Center — biome title -->
+  <div class="center-area">
+    <div id="biomeTitle">🌌 Deep Space</div>
+    <div id="biomeDesc">Vast cosmic drones, distant radio signals, the sound of nothing</div>
+  </div>
+
+  <!-- Bottom controls -->
+  <div class="controls">
+    <div class="biome-selector">
+      <button class="biome-btn active" id="biome-deepSpace">
+        <span class="biome-key">1</span>
+        <span class="biome-icon">🌌</span>
+        <span class="biome-label">Space</span>
+      </button>
+      <button class="biome-btn" id="biome-rainyNight">
+        <span class="biome-key">2</span>
+        <span class="biome-icon">🌧️</span>
+        <span class="biome-label">Rain</span>
+      </button>
+      <button class="biome-btn" id="biome-digitalForest">
+        <span class="biome-key">3</span>
+        <span class="biome-icon">🌲</span>
+        <span class="biome-label">Forest</span>
+      </button>
+      <button class="biome-btn" id="biome-cyberpunkCity">
+        <span class="biome-key">4</span>
+        <span class="biome-icon">🏙️</span>
+        <span class="biome-label">Cyber</span>
+      </button>
+      <button class="biome-btn" id="biome-oceanDepths">
+        <span class="biome-key">5</span>
+        <span class="biome-icon">🐋</span>
+        <span class="biome-label">Ocean</span>
+      </button>
+      <button class="biome-btn" id="biome-midnightLibrary">
+        <span class="biome-key">6</span>
+        <span class="biome-icon">📚</span>
+        <span class="biome-label">Library</span>
+      </button>
+    </div>
+
+    <div class="play-area">
+      <button id="playBtn"><span class="play-icon">▶</span></button>
+    </div>
+
+    <div class="sliders">
+      <div class="slider-row">
+        <span class="slider-label">Volume</span>
+        <input type="range" id="volumeSlider" min="0" max="100" value="70">
+        <span class="slider-value" id="volumeValue">70%</span>
+      </div>
+      <div class="slider-row">
+        <span class="slider-label">Intensity</span>
+        <input type="range" id="intensitySlider" min="0" max="100" value="50">
+        <span class="slider-value" id="intensityValue">50%</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="shortcuts">
+  <kbd>Space</kbd> play/pause &nbsp; <kbd>M</kbd> mute<br>
+  <kbd>1</kbd>-<kbd>6</kbd> switch biome
+</div>
+
+<script>
+// === INLINE: audio-engine.js ===
+// === AUDIO ENGINE ===
+// Generative ambient soundscape synthesizer
+// Pure Web Audio API, zero dependencies
+
+class AudioEngine {
+  constructor() {
+    this.ctx = null;
+    this.master = null;
+    this.compressor = null;
+    this.reverb = null;
+    this.layers = {};
+    this.isPlaying = false;
+    this.currentBiome = null;
+    this.schedulers = [];
+    this.intensity = 0.5;
+    this.noiseBuffers = {};
+  }
+
+  async init() {
+    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // Master chain: layers → compressor → master gain → destination
+    this.master = this.ctx.createGain();
+    this.master.gain.value = 0.7;
+
+    this.compressor = this.ctx.createDynamicsCompressor();
+    this.compressor.threshold.value = -24;
+    this.compressor.knee.value = 30;
+    this.compressor.ratio.value = 4;
+    this.compressor.attack.value = 0.003;
+    this.compressor.release.value = 0.25;
+
+    this.reverb = await this.createReverb(4.0, 0.3);
+
+    this.compressor.connect(this.master);
+    this.master.connect(this.ctx.destination);
+
+    // Pre-generate noise buffers
+    this.noiseBuffers.white = this.createNoiseBuffer('white');
+    this.noiseBuffers.pink = this.createNoiseBuffer('pink');
+    this.noiseBuffers.brown = this.createNoiseBuffer('brown');
+  }
+
+  createNoiseBuffer(type, duration = 4) {
+    const length = this.ctx.sampleRate * duration;
+    const buffer = this.ctx.createBuffer(2, length, this.ctx.sampleRate);
+
+    for (let ch = 0; ch < 2; ch++) {
+      const data = buffer.getChannelData(ch);
+      let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+
+      for (let i = 0; i < length; i++) {
+        const white = Math.random() * 2 - 1;
+
+        if (type === 'white') {
+          data[i] = white * 0.5;
+        } else if (type === 'pink') {
+          b0 = 0.99886 * b0 + white * 0.0555179;
+          b1 = 0.99332 * b1 + white * 0.0750759;
+          b2 = 0.96900 * b2 + white * 0.1538520;
+          b3 = 0.86650 * b3 + white * 0.3104856;
+          b4 = 0.55000 * b4 + white * 0.5329522;
+          b5 = -0.7616 * b5 - white * 0.0168980;
+          data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.06;
+          b6 = white * 0.115926;
+        } else if (type === 'brown') {
+          b0 = (b0 + (0.02 * white)) / 1.02;
+          data[i] = b0 * 3.5;
+        }
+      }
+    }
+    return buffer;
+  }
+
+  async createReverb(duration, decay) {
+    const length = this.ctx.sampleRate * duration;
+    const buffer = this.ctx.createBuffer(2, length, this.ctx.sampleRate);
+
+    for (let ch = 0; ch < 2; ch++) {
+      const data = buffer.getChannelData(ch);
+      for (let i = 0; i < length; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay * 10);
+      }
+    }
+
+    const convolver = this.ctx.createConvolver();
+    convolver.buffer = buffer;
+    return convolver;
+  }
+
+  createReverbSend(dryNode, wetAmount = 0.3) {
+    const dry = this.ctx.createGain();
+    const wet = this.ctx.createGain();
+    dry.gain.value = 1;
+    wet.gain.value = wetAmount;
+
+    dryNode.connect(dry);
+    dryNode.connect(wet);
+    dry.connect(this.compressor);
+    wet.connect(this.reverb);
+    this.reverb.connect(this.compressor);
+
+    return { dry, wet };
+  }
+
+  // Musical scales
+  static SCALES = {
+    pentatonic: [0, 2, 4, 7, 9],
+    minor: [0, 2, 3, 5, 7, 8, 10],
+    dorian: [0, 2, 3, 5, 7, 9, 10],
+    mixolydian: [0, 2, 4, 5, 7, 9, 10],
+    wholeTone: [0, 2, 4, 6, 8, 10],
+    chromatic: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+    japanese: [0, 1, 5, 7, 8], // In Sen
+    lydian: [0, 2, 4, 6, 7, 9, 11],
+  };
+
+  noteToFreq(note) {
+    return 440 * Math.pow(2, (note - 69) / 12);
+  }
+
+  getScaleNote(scale, root, degree) {
+    const s = AudioEngine.SCALES[scale];
+    const octave = Math.floor(degree / s.length);
+    const idx = ((degree % s.length) + s.length) % s.length;
+    return root + octave * 12 + s[idx];
+  }
+
+  // Markov-style melody generator
+  createMelodyGenerator(scale, root, range = 14) {
+    let current = Math.floor(range / 2);
+    const weights = [0.05, 0.1, 0.2, 0.3, 0.2, 0.1, 0.05]; // step probabilities
+
+    return () => {
+      // Weighted random walk with gravity toward center
+      const gravity = (range / 2 - current) * 0.1;
+      let step = 0;
+      const r = Math.random();
+      let cumulative = 0;
+      for (let i = 0; i < weights.length; i++) {
+        cumulative += weights[i];
+        if (r < cumulative) {
+          step = i - 3;
+          break;
+        }
+      }
+      step += Math.sign(gravity) * (Math.random() < Math.abs(gravity) ? 1 : 0);
+      current = Math.max(0, Math.min(range - 1, current + step));
+      return this.getScaleNote(scale, root, current);
+    };
+  }
+
+  // Create a single drone oscillator with slow modulation
+  createDrone(freq, type = 'sine', detune = 0, volume = 0.15) {
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    const lfo = this.ctx.createOscillator();
+    const lfoGain = this.ctx.createGain();
+
+    osc.type = type;
+    osc.frequency.value = freq;
+    osc.detune.value = detune;
+
+    lfo.type = 'sine';
+    lfo.frequency.value = 0.05 + Math.random() * 0.1;
+    lfoGain.gain.value = volume * 0.3;
+
+    lfo.connect(lfoGain);
+    lfoGain.connect(gain.gain);
+
+    gain.gain.value = volume;
+    osc.connect(gain);
+
+    osc.start();
+    lfo.start();
+
+    return { osc, gain, lfo, lfoGain };
+  }
+
+  // Noise layer with filtering
+  createNoiseLayer(type, filterType, filterFreq, volume = 0.1) {
+    const source = this.ctx.createBufferSource();
+    source.buffer = this.noiseBuffers[type] || this.noiseBuffers.white;
+    source.loop = true;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = filterType;
+    filter.frequency.value = filterFreq;
+    filter.Q.value = 1;
+
+    const gain = this.ctx.createGain();
+    gain.gain.value = volume;
+
+    // Slow filter modulation
+    const lfo = this.ctx.createOscillator();
+    const lfoGain = this.ctx.createGain();
+    lfo.frequency.value = 0.03 + Math.random() * 0.05;
+    lfoGain.gain.value = filterFreq * 0.3;
+    lfo.connect(lfoGain);
+    lfoGain.connect(filter.frequency);
+
+    source.connect(filter);
+    filter.connect(gain);
+
+    source.start();
+    lfo.start();
+
+    return { source, filter, gain, lfo, lfoGain };
+  }
+
+  // Pad synth - sustained chord with slow attack/release
+  createPad(notes, waveform = 'sine', volume = 0.08, attackTime = 3, releaseTime = 4) {
+    const gain = this.ctx.createGain();
+    gain.gain.value = 0;
+
+    const oscs = notes.map(note => {
+      const osc = this.ctx.createOscillator();
+      osc.type = waveform;
+      osc.frequency.value = this.noteToFreq(note);
+      osc.detune.value = (Math.random() - 0.5) * 10; // slight detuning
+      osc.connect(gain);
+      osc.start();
+      return osc;
+    });
+
+    // Envelope
+    const now = this.ctx.currentTime;
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(volume, now + attackTime);
+
+    return {
+      gain,
+      oscs,
+      release: () => {
+        const t = this.ctx.currentTime;
+        gain.gain.setValueAtTime(gain.gain.value, t);
+        gain.gain.linearRampToValueAtTime(0, t + releaseTime);
+        setTimeout(() => oscs.forEach(o => { try { o.stop(); } catch(e){} }), releaseTime * 1000 + 100);
+      }
+    };
+  }
+
+  // Pluck / bell synth for melodic elements
+  playNote(freq, volume = 0.1, decay = 2, type = 'triangle') {
+    const osc = this.ctx.createOscillator();
+    const osc2 = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    const filter = this.ctx.createBiquadFilter();
+
+    osc.type = type;
+    osc.frequency.value = freq;
+    osc2.type = 'sine';
+    osc2.frequency.value = freq * 2.01; // slight harmonic
+
+    filter.type = 'lowpass';
+    filter.frequency.value = freq * 4;
+
+    const now = this.ctx.currentTime;
+    gain.gain.setValueAtTime(volume, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + decay);
+    filter.frequency.setValueAtTime(freq * 4, now);
+    filter.frequency.exponentialRampToValueAtTime(freq * 0.5, now + decay * 0.8);
+
+    osc.connect(filter);
+    osc2.connect(filter);
+    const osc2gain = this.ctx.createGain();
+    osc2gain.gain.value = volume * 0.3;
+    osc2.disconnect();
+    osc2.connect(osc2gain);
+    osc2gain.connect(filter);
+
+    filter.connect(gain);
+
+    osc.start(now);
+    osc2.start(now);
+    osc.stop(now + decay);
+    osc2.stop(now + decay);
+
+    return gain;
+  }
+
+  // Schedule repeating events with slight randomization
+  scheduleLoop(callback, baseInterval, variance = 0.2) {
+    let active = true;
+    const loop = () => {
+      if (!active || !this.isPlaying) return;
+      callback();
+      const next = baseInterval * (1 + (Math.random() - 0.5) * variance * 2);
+      const id = setTimeout(loop, next * 1000);
+      this._timeouts.push(id);
+    };
+    loop();
+    return { stop: () => { active = false; } };
+  }
+
+  stop() {
+    this.isPlaying = false;
+    this.schedulers.forEach(s => s.stop());
+    this.schedulers = [];
+    if (this._timeouts) this._timeouts.forEach(id => clearTimeout(id));
+    this._timeouts = [];
+
+    // Fade out master
+    if (this.master && this.ctx) {
+      const now = this.ctx.currentTime;
+      this.master.gain.setValueAtTime(this.master.gain.value, now);
+      this.master.gain.linearRampToValueAtTime(0, now + 2);
+    }
+
+    // Clean up active pads
+    if (this._activePads) {
+      this._activePads.forEach(p => p.release());
+      this._activePads = [];
+    }
+    if (this._activeDrones) {
+      this._activeDrones.forEach(d => {
+        try {
+          d.gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 2);
+          setTimeout(() => { try { d.osc.stop(); d.lfo.stop(); } catch(e){} }, 2500);
+        } catch(e) {}
+      });
+      this._activeDrones = [];
+    }
+    if (this._activeNoise) {
+      this._activeNoise.forEach(n => {
+        try {
+          n.gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 2);
+          setTimeout(() => { try { n.source.stop(); n.lfo.stop(); } catch(e){} }, 2500);
+        } catch(e) {}
+      });
+      this._activeNoise = [];
+    }
+  }
+
+  setIntensity(val) {
+    this.intensity = Math.max(0, Math.min(1, val));
+  }
+
+  setVolume(val) {
+    if (this.master) {
+      this.master.gain.setTargetAtTime(val, this.ctx.currentTime, 0.5);
+    }
+  }
+
+  getAnalyserData() {
+    if (!this._analyser) return null;
+    const data = new Uint8Array(this._analyser.frequencyBinCount);
+    this._analyser.getByteFrequencyData(data);
+    return data;
+  }
+
+  getWaveformData() {
+    if (!this._analyser) return null;
+    const data = new Uint8Array(this._analyser.frequencyBinCount);
+    this._analyser.getByteTimeDomainData(data);
+    return data;
+  }
+
+  setupAnalyser() {
+    this._analyser = this.ctx.createAnalyser();
+    this._analyser.fftSize = 512;
+    this._analyser.smoothingTimeConstant = 0.8;
+    this.master.connect(this._analyser);
+  }
+}
+
+// === INLINE: biomes.js ===
+// === BIOME DEFINITIONS ===
+// Each biome is a complete soundscape configuration
+
+const BIOMES = {
+
+  deepSpace: {
+    name: 'Deep Space',
+    icon: '🌌',
+    description: 'Vast cosmic drones, distant radio signals, the sound of nothing',
+    colors: {
+      bg: '#05050f', primary: '#4a6cf7', secondary: '#8b5cf6',
+      accent: '#c084fc', particles: ['#4a6cf7', '#8b5cf6', '#c084fc', '#312e81', '#1e1b4b'],
+    },
+    visualMode: 'nebula',
+    setup(engine) {
+      engine._activeDrones = []; engine._activePads = []; engine._activeNoise = []; engine._timeouts = [];
+      const drone1 = engine.createDrone(36, 'sine', 0, 0.12);
+      drone1.gain.connect(engine.compressor); engine._activeDrones.push(drone1);
+      const drone2 = engine.createDrone(54, 'sine', 5, 0.06);
+      drone2.gain.connect(engine.compressor); engine._activeDrones.push(drone2);
+      const drone3 = engine.createDrone(880, 'sine', -3, 0.02);
+      drone3.gain.connect(engine.compressor); engine._activeDrones.push(drone3);
+      const noise = engine.createNoiseLayer('brown', 'lowpass', 200, 0.04);
+      engine.createReverbSend(noise.gain, 0.6); engine._activeNoise.push(noise);
+      const melody = engine.createMelodyGenerator('pentatonic', 72, 10);
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        if (Math.random() > 0.6 * engine.intensity) return;
+        const g = engine.playNote(engine.noteToFreq(melody()), 0.04 * engine.intensity, 6, 'sine');
+        engine.createReverbSend(g, 0.8);
+      }, 4, 0.6));
+      const roots = [36, 38, 41, 43, 33]; let rootIdx = 0; let currentPad = null;
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        if (currentPad) currentPad.release();
+        rootIdx = (rootIdx + (Math.random() < 0.3 ? 2 : 1)) % roots.length;
+        const r = roots[rootIdx];
+        currentPad = engine.createPad([r+24,r+31,r+36,r+43], 'sine', 0.04*engine.intensity, 6, 8);
+        engine.createReverbSend(currentPad.gain, 0.7); engine._activePads.push(currentPad);
+      }, 18, 0.3));
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        if (Math.random() > 0.4) return;
+        const osc = engine.ctx.createOscillator(); const gain = engine.ctx.createGain();
+        const filter = engine.ctx.createBiquadFilter();
+        osc.type = 'sawtooth'; osc.frequency.value = 800+Math.random()*2000;
+        filter.type = 'bandpass'; filter.frequency.value = osc.frequency.value; filter.Q.value = 20;
+        const now = engine.ctx.currentTime;
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.015*engine.intensity, now+0.3);
+        gain.gain.linearRampToValueAtTime(0, now+0.8+Math.random()*1.5);
+        osc.connect(filter); filter.connect(gain); engine.createReverbSend(gain, 0.9);
+        osc.start(now); osc.stop(now+3);
+      }, 8, 0.5));
+    }
+  },
+
+  rainyNight: {
+    name: 'Rainy Night',
+    icon: '🌧️',
+    description: 'Gentle rain on windows, distant city hum, warm lo-fi vibes',
+    colors: {
+      bg: '#0a0f1a', primary: '#3b82f6', secondary: '#60a5fa',
+      accent: '#93c5fd', particles: ['#3b82f6', '#60a5fa', '#93c5fd', '#1e3a5f', '#1e40af'],
+    },
+    visualMode: 'rain',
+    setup(engine) {
+      engine._activeDrones = []; engine._activePads = []; engine._activeNoise = []; engine._timeouts = [];
+      const rain = engine.createNoiseLayer('white', 'bandpass', 6000, 0.08);
+      rain.filter.Q.value = 0.5; engine.createReverbSend(rain.gain, 0.3); engine._activeNoise.push(rain);
+      const rain2 = engine.createNoiseLayer('pink', 'highpass', 3000, 0.04);
+      rain2.gain.connect(engine.compressor); engine._activeNoise.push(rain2);
+      const hum = engine.createDrone(55, 'sine', 0, 0.06);
+      hum.gain.connect(engine.compressor); engine._activeDrones.push(hum);
+      const melody = engine.createMelodyGenerator('pentatonic', 60, 12);
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        const freq = engine.noteToFreq(melody());
+        const g = engine.playNote(freq, 0.06*engine.intensity, 3, 'triangle');
+        const lpf = engine.ctx.createBiquadFilter(); lpf.type='lowpass'; lpf.frequency.value=1500;
+        g.connect(lpf); engine.createReverbSend(lpf, 0.4);
+      }, 2.5, 0.4));
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        if (Math.random() > 0.5) return;
+        const note = [36,38,41,43][Math.floor(Math.random()*4)];
+        const g = engine.playNote(engine.noteToFreq(note), 0.05*engine.intensity, 4, 'sine');
+        g.connect(engine.compressor);
+      }, 6, 0.3));
+      const chords = [[60,63,67,72],[58,62,65,70],[56,60,63,68],[55,58,62,67]];
+      let ci=0, pad=null;
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        if (pad) pad.release(); const c = chords[ci%chords.length]; ci++;
+        pad = engine.createPad(c, 'triangle', 0.03*engine.intensity, 4, 5);
+        const lpf = engine.ctx.createBiquadFilter(); lpf.type='lowpass'; lpf.frequency.value=800;
+        pad.gain.connect(lpf); engine.createReverbSend(lpf, 0.5); engine._activePads.push(pad);
+      }, 12, 0.2));
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        if (Math.random() > engine.intensity) return;
+        const osc = engine.ctx.createOscillator(); const gain = engine.ctx.createGain();
+        osc.type='sine'; osc.frequency.value = 2000+Math.random()*4000;
+        const now = engine.ctx.currentTime;
+        gain.gain.setValueAtTime(0.02*engine.intensity, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now+0.08);
+        osc.connect(gain); gain.connect(engine.compressor); osc.start(now); osc.stop(now+0.1);
+      }, 0.15, 0.8));
+    }
+  },
+
+  digitalForest: {
+    name: 'Digital Forest',
+    icon: '🌲',
+    description: 'Birdsong algorithms, data streams through leaves, organic circuits',
+    colors: {
+      bg: '#050f0a', primary: '#22c55e', secondary: '#4ade80',
+      accent: '#86efac', particles: ['#22c55e', '#4ade80', '#86efac', '#166534', '#14532d'],
+    },
+    visualMode: 'forest',
+    setup(engine) {
+      engine._activeDrones = []; engine._activePads = []; engine._activeNoise = []; engine._timeouts = [];
+      const wind = engine.createNoiseLayer('brown', 'bandpass', 400, 0.06);
+      wind.filter.Q.value = 0.8; engine.createReverbSend(wind.gain, 0.4); engine._activeNoise.push(wind);
+      const leaves = engine.createNoiseLayer('pink', 'highpass', 2000, 0.03);
+      leaves.gain.connect(engine.compressor); engine._activeNoise.push(leaves);
+      const earth = engine.createDrone(65, 'sine', 0, 0.06);
+      earth.gain.connect(engine.compressor); engine._activeDrones.push(earth);
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        if (Math.random() > 0.5*engine.intensity) return;
+        const bf = 1200+Math.random()*1500;
+        const osc = engine.ctx.createOscillator(); const mod = engine.ctx.createOscillator();
+        const mg = engine.ctx.createGain(); const gain = engine.ctx.createGain();
+        osc.type='sine'; mod.type='sine'; mod.frequency.value=5+Math.random()*10;
+        mg.gain.value = bf*0.3; mod.connect(mg); mg.connect(osc.frequency);
+        const now = engine.ctx.currentTime; const dur = 0.1+Math.random()*0.3;
+        osc.frequency.setValueAtTime(bf, now);
+        osc.frequency.linearRampToValueAtTime(bf*(1.2+Math.random()*0.5), now+dur);
+        gain.gain.setValueAtTime(0.03*engine.intensity, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now+dur);
+        osc.connect(gain); engine.createReverbSend(gain, 0.5);
+        osc.start(now); mod.start(now); osc.stop(now+dur+0.1); mod.stop(now+dur+0.1);
+      }, 3, 0.6));
+      const melody = engine.createMelodyGenerator('japanese', 67, 10);
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        if (Math.random() > 0.7) return;
+        const g = engine.playNote(engine.noteToFreq(melody()), 0.05*engine.intensity, 4, 'sine');
+        engine.createReverbSend(g, 0.5);
+      }, 5, 0.4));
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        if (Math.random() > 0.6) return;
+        const osc = engine.ctx.createOscillator(); const gain = engine.ctx.createGain();
+        osc.type='square'; osc.frequency.value=200+Math.random()*800;
+        const now = engine.ctx.currentTime;
+        gain.gain.setValueAtTime(0.01*engine.intensity, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now+0.05);
+        osc.connect(gain); gain.connect(engine.compressor); osc.start(now); osc.stop(now+0.06);
+      }, 0.8, 0.7));
+      const chords=[[55,62,67,73],[57,64,69,74],[53,60,67,72],[55,62,66,71]];
+      let ci=0, pad=null;
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        if (pad) pad.release(); ci=(ci+1)%chords.length;
+        pad = engine.createPad(chords[ci], 'sine', 0.03*engine.intensity, 5, 6);
+        engine.createReverbSend(pad.gain, 0.6); engine._activePads.push(pad);
+      }, 16, 0.2));
+    }
+  },
+
+  cyberpunkCity: {
+    name: 'Cyberpunk City',
+    icon: '🏙️',
+    description: 'Neon hum, synth drones, glitch artifacts, rain on chrome',
+    colors: {
+      bg: '#0a0a14', primary: '#f43f5e', secondary: '#fb923c',
+      accent: '#fbbf24', particles: ['#f43f5e', '#fb923c', '#fbbf24', '#e11d48', '#9f1239'],
+    },
+    visualMode: 'grid',
+    setup(engine) {
+      engine._activeDrones = []; engine._activePads = []; engine._activeNoise = []; engine._timeouts = [];
+      const bass = engine.createDrone(40, 'sawtooth', 0, 0.06);
+      const bf = engine.ctx.createBiquadFilter(); bf.type='lowpass'; bf.frequency.value=120;
+      bass.gain.connect(bf); bf.connect(engine.compressor); engine._activeDrones.push(bass);
+      const neon = engine.createDrone(60, 'square', 3, 0.02);
+      const nf = engine.ctx.createBiquadFilter(); nf.type='bandpass'; nf.frequency.value=500; nf.Q.value=5;
+      neon.gain.connect(nf); nf.connect(engine.compressor); engine._activeDrones.push(neon);
+      const cn = engine.createNoiseLayer('pink', 'lowpass', 800, 0.05);
+      cn.gain.connect(engine.compressor); engine._activeNoise.push(cn);
+      const rn = engine.createNoiseLayer('white', 'highpass', 5000, 0.03);
+      engine.createReverbSend(rn.gain, 0.3); engine._activeNoise.push(rn);
+      const melody = engine.createMelodyGenerator('dorian', 48, 14);
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        if (Math.random() > 0.7*engine.intensity) return;
+        const freq = engine.noteToFreq(melody());
+        const osc = engine.ctx.createOscillator(); const gain = engine.ctx.createGain();
+        const filter = engine.ctx.createBiquadFilter();
+        osc.type='sawtooth'; osc.frequency.value=freq;
+        filter.type='lowpass'; filter.frequency.value=freq*3; filter.Q.value=2;
+        const now = engine.ctx.currentTime;
+        gain.gain.setValueAtTime(0.05*engine.intensity, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now+0.8);
+        filter.frequency.exponentialRampToValueAtTime(freq*0.3, now+0.6);
+        osc.connect(filter); filter.connect(gain); engine.createReverbSend(gain, 0.4);
+        osc.start(now); osc.stop(now+1);
+      }, 1.5, 0.3));
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        if (Math.random() > 0.3) return;
+        const src = engine.ctx.createBufferSource(); src.buffer = engine.noiseBuffers.white;
+        const gain = engine.ctx.createGain(); const flt = engine.ctx.createBiquadFilter();
+        flt.type='bandpass'; flt.frequency.value=500+Math.random()*3000; flt.Q.value=10+Math.random()*20;
+        const now = engine.ctx.currentTime; const dur = 0.02+Math.random()*0.08;
+        gain.gain.setValueAtTime(0.06*engine.intensity, now);
+        gain.gain.linearRampToValueAtTime(0, now+dur);
+        src.connect(flt); flt.connect(gain); gain.connect(engine.compressor);
+        src.start(now); src.stop(now+dur+0.01);
+      }, 2, 0.8));
+      const chords=[[36,43,48,55,60],[34,41,46,53,58],[32,39,44,51,56],[31,38,43,50,55]];
+      let ci=0, pad=null;
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        if (pad) pad.release(); ci=(ci+1)%chords.length;
+        pad = engine.createPad(chords[ci], 'sawtooth', 0.02*engine.intensity, 4, 5);
+        const lpf = engine.ctx.createBiquadFilter(); lpf.type='lowpass'; lpf.frequency.value=600;
+        pad.gain.connect(lpf); engine.createReverbSend(lpf, 0.5); engine._activePads.push(pad);
+      }, 14, 0.2));
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        if (Math.random() > 0.25) return;
+        const osc = engine.ctx.createOscillator(); const gain = engine.ctx.createGain();
+        osc.type='sine'; const now = engine.ctx.currentTime; const dur=3+Math.random()*2;
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.linearRampToValueAtTime(600, now+dur*0.5);
+        osc.frequency.linearRampToValueAtTime(400, now+dur);
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.01*engine.intensity, now+dur*0.3);
+        gain.gain.linearRampToValueAtTime(0, now+dur);
+        osc.connect(gain); engine.createReverbSend(gain, 0.7); osc.start(now); osc.stop(now+dur+0.1);
+      }, 20, 0.5));
+    }
+  },
+
+  oceanDepths: {
+    name: 'Ocean Depths',
+    icon: '🐋',
+    description: 'Whale songs, deep currents, bioluminescent pulses, pressure',
+    colors: {
+      bg: '#020a14', primary: '#0ea5e9', secondary: '#06b6d4',
+      accent: '#67e8f9', particles: ['#0ea5e9', '#06b6d4', '#67e8f9', '#0c4a6e', '#164e63'],
+    },
+    visualMode: 'ocean',
+    setup(engine) {
+      engine._activeDrones = []; engine._activePads = []; engine._activeNoise = []; engine._timeouts = [];
+      const deep = engine.createDrone(30, 'sine', 0, 0.1);
+      deep.gain.connect(engine.compressor); engine._activeDrones.push(deep);
+      const deep2 = engine.createDrone(45, 'sine', 3, 0.05);
+      deep2.gain.connect(engine.compressor); engine._activeDrones.push(deep2);
+      const current = engine.createNoiseLayer('brown', 'lowpass', 300, 0.07);
+      current.lfoGain.gain.value=150; current.lfo.frequency.value=0.02;
+      engine.createReverbSend(current.gain, 0.5); engine._activeNoise.push(current);
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        if (Math.random() > 0.6*engine.intensity) return;
+        const count = 1+Math.floor(Math.random()*3);
+        for (let i=0;i<count;i++) {
+          const id = setTimeout(() => {
+            const osc = engine.ctx.createOscillator(); const gain = engine.ctx.createGain();
+            osc.type='sine'; const freq=300+Math.random()*600; osc.frequency.value=freq;
+            const now = engine.ctx.currentTime;
+            osc.frequency.exponentialRampToValueAtTime(freq*1.5, now+0.15);
+            gain.gain.setValueAtTime(0.02*engine.intensity, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now+0.15);
+            osc.connect(gain); engine.createReverbSend(gain, 0.6); osc.start(now); osc.stop(now+0.2);
+          }, i*(50+Math.random()*100));
+          engine._timeouts.push(id);
+        }
+      }, 4, 0.5));
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        if (Math.random() > 0.4) return;
+        const osc = engine.ctx.createOscillator(); const mod = engine.ctx.createOscillator();
+        const mg = engine.ctx.createGain(); const gain = engine.ctx.createGain();
+        const bf = 80+Math.random()*120;
+        osc.type='sine'; osc.frequency.value=bf; mod.type='sine'; mod.frequency.value=0.5+Math.random()*2;
+        mg.gain.value = bf*0.5; mod.connect(mg); mg.connect(osc.frequency);
+        const now = engine.ctx.currentTime; const dur = 4+Math.random()*4;
+        osc.frequency.setValueAtTime(bf, now);
+        osc.frequency.linearRampToValueAtTime(bf*(0.7+Math.random()*0.8), now+dur*0.5);
+        osc.frequency.linearRampToValueAtTime(bf*(0.5+Math.random()*0.3), now+dur);
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.04*engine.intensity, now+dur*0.2);
+        gain.gain.linearRampToValueAtTime(0.02*engine.intensity, now+dur*0.6);
+        gain.gain.linearRampToValueAtTime(0, now+dur);
+        osc.connect(gain); engine.createReverbSend(gain, 0.8);
+        osc.start(now); mod.start(now); osc.stop(now+dur+0.1); mod.stop(now+dur+0.1);
+      }, 10, 0.4));
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        if (Math.random() > 0.5) return;
+        const note = [72,74,76,79,81,84][Math.floor(Math.random()*6)];
+        const g = engine.playNote(engine.noteToFreq(note), 0.025*engine.intensity, 3, 'sine');
+        engine.createReverbSend(g, 0.7);
+      }, 6, 0.5));
+      const chords=[[36,48,54,60,66],[38,50,56,62,68],[34,46,52,58,64],[40,52,58,64,70]];
+      let ci=0, pad=null;
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        if (pad) pad.release(); ci=(ci+1)%chords.length;
+        pad = engine.createPad(chords[ci], 'sine', 0.03*engine.intensity, 6, 7);
+        engine.createReverbSend(pad.gain, 0.6); engine._activePads.push(pad);
+      }, 20, 0.2));
+    }
+  },
+
+  midnightLibrary: {
+    name: 'Midnight Library',
+    icon: '📚',
+    description: 'Crackling pages, clock ticks, dusty piano, warm lamplight hum',
+    colors: {
+      bg: '#0f0a05', primary: '#d97706', secondary: '#f59e0b',
+      accent: '#fbbf24', particles: ['#d97706', '#f59e0b', '#fbbf24', '#92400e', '#78350f'],
+    },
+    visualMode: 'particles',
+    setup(engine) {
+      engine._activeDrones = []; engine._activePads = []; engine._activeNoise = []; engine._timeouts = [];
+      // Warm room hum
+      const hum = engine.createDrone(60, 'sine', 0, 0.04);
+      hum.gain.connect(engine.compressor); engine._activeDrones.push(hum);
+      const hum2 = engine.createDrone(120, 'sine', 2, 0.02);
+      hum2.gain.connect(engine.compressor); engine._activeDrones.push(hum2);
+      // Fireplace crackle — bursts of filtered noise
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        const src = engine.ctx.createBufferSource(); src.buffer = engine.noiseBuffers.white;
+        const gain = engine.ctx.createGain(); const flt = engine.ctx.createBiquadFilter();
+        flt.type='bandpass'; flt.frequency.value=1000+Math.random()*2000; flt.Q.value=3;
+        const now = engine.ctx.currentTime; const dur = 0.02+Math.random()*0.06;
+        gain.gain.setValueAtTime(0.04*engine.intensity, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now+dur);
+        src.connect(flt); flt.connect(gain); gain.connect(engine.compressor);
+        src.start(now); src.stop(now+dur+0.01);
+      }, 0.3, 0.7));
+      // Clock tick
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        const osc = engine.ctx.createOscillator(); const gain = engine.ctx.createGain();
+        osc.type='sine'; osc.frequency.value=800+Math.random()*200;
+        const now = engine.ctx.currentTime;
+        gain.gain.setValueAtTime(0.015*engine.intensity, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now+0.03);
+        osc.connect(gain); gain.connect(engine.compressor); osc.start(now); osc.stop(now+0.04);
+        // Tock
+        const id = setTimeout(() => {
+          const o2 = engine.ctx.createOscillator(); const g2 = engine.ctx.createGain();
+          o2.type='sine'; o2.frequency.value=600+Math.random()*100;
+          const t = engine.ctx.currentTime;
+          g2.gain.setValueAtTime(0.01*engine.intensity, t);
+          g2.gain.exponentialRampToValueAtTime(0.001, t+0.03);
+          o2.connect(g2); g2.connect(engine.compressor); o2.start(t); o2.stop(t+0.04);
+        }, 500);
+        engine._timeouts.push(id);
+      }, 2, 0.05));
+      // Dusty piano — pentatonic, gentle
+      const melody = engine.createMelodyGenerator('pentatonic', 60, 14);
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        if (Math.random() > 0.8) return;
+        const freq = engine.noteToFreq(melody());
+        const g = engine.playNote(freq, 0.05*engine.intensity, 3.5, 'triangle');
+        const lpf = engine.ctx.createBiquadFilter(); lpf.type='lowpass'; lpf.frequency.value=2000;
+        g.connect(lpf); engine.createReverbSend(lpf, 0.4);
+      }, 3, 0.3));
+      // Warm background noise (room tone)
+      const room = engine.createNoiseLayer('brown', 'lowpass', 400, 0.03);
+      room.gain.connect(engine.compressor); engine._activeNoise.push(room);
+      // Chords
+      const chords=[[60,64,67,72],[58,62,65,69],[55,60,64,67],[57,60,64,69]];
+      let ci=0, pad=null;
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        if (pad) pad.release(); ci=(ci+1)%chords.length;
+        pad = engine.createPad(chords[ci], 'triangle', 0.025*engine.intensity, 5, 6);
+        const lpf = engine.ctx.createBiquadFilter(); lpf.type='lowpass'; lpf.frequency.value=1200;
+        pad.gain.connect(lpf); engine.createReverbSend(lpf, 0.5); engine._activePads.push(pad);
+      }, 14, 0.2));
+      // Page turn sounds — soft noise bursts
+      engine.schedulers.push(engine.scheduleLoop(() => {
+        if (Math.random() > 0.3) return;
+        const src = engine.ctx.createBufferSource(); src.buffer = engine.noiseBuffers.pink;
+        const gain = engine.ctx.createGain(); const flt = engine.ctx.createBiquadFilter();
+        flt.type='highpass'; flt.frequency.value=3000;
+        const now = engine.ctx.currentTime;
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.02*engine.intensity, now+0.1);
+        gain.gain.linearRampToValueAtTime(0, now+0.4);
+        src.connect(flt); flt.connect(gain); gain.connect(engine.compressor);
+        src.start(now); src.stop(now+0.5);
+      }, 8, 0.5));
+    }
+  }
+};
+
+// === INLINE: visuals.js ===
+// === VISUAL RENDERER ===
+// Canvas-based reactive visualizations that respond to audio
+
+class VisualRenderer {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.particles = [];
+    this.mode = 'nebula';
+    this.colors = null;
+    this.animId = null;
+    this.time = 0;
+    this.audioData = null;
+    this.waveformData = null;
+    this.raindrops = [];
+    this.gridLines = [];
+  }
+
+  resize() {
+    const dpr = window.devicePixelRatio || 1;
+    this.canvas.width = this.canvas.clientWidth * dpr;
+    this.canvas.height = this.canvas.clientHeight * dpr;
+    this.ctx.scale(dpr, dpr);
+    this.w = this.canvas.clientWidth;
+    this.h = this.canvas.clientHeight;
+  }
+
+  setMode(mode, colors) {
+    this.mode = mode;
+    this.colors = colors;
+    this.particles = [];
+    this.raindrops = [];
+    this.gridLines = [];
+    this.initParticles();
+  }
+
+  initParticles() {
+    const count = this.mode === 'rain' ? 200 : this.mode === 'grid' ? 60 : 80;
+    this.particles = [];
+    for (let i = 0; i < count; i++) {
+      this.particles.push(this.createParticle());
+    }
+    if (this.mode === 'grid') {
+      this.gridLines = [];
+      for (let i = 0; i < 20; i++) {
+        this.gridLines.push({
+          y: Math.random() * this.h,
+          speed: 0.2 + Math.random() * 0.5,
+          opacity: 0.05 + Math.random() * 0.1,
+        });
+      }
+    }
+  }
+
+  createParticle() {
+    const c = this.colors?.particles || ['#ffffff'];
+    const color = c[Math.floor(Math.random() * c.length)];
+    if (this.mode === 'rain') {
+      return {
+        x: Math.random() * (this.w || 800),
+        y: Math.random() * (this.h || 600),
+        vy: 2 + Math.random() * 4,
+        vx: -0.5 - Math.random() * 0.5,
+        length: 10 + Math.random() * 20,
+        opacity: 0.1 + Math.random() * 0.3,
+        color,
+      };
+    }
+    return {
+      x: Math.random() * (this.w || 800),
+      y: Math.random() * (this.h || 600),
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: (Math.random() - 0.5) * 0.3,
+      size: 1 + Math.random() * 3,
+      baseSize: 1 + Math.random() * 3,
+      opacity: 0.1 + Math.random() * 0.5,
+      color,
+      phase: Math.random() * Math.PI * 2,
+      pulseSpeed: 0.01 + Math.random() * 0.02,
+    };
+  }
+
+  updateAudio(frequencyData, waveformData) {
+    this.audioData = frequencyData;
+    this.waveformData = waveformData;
+  }
+
+  getAudioEnergy() {
+    if (!this.audioData) return 0;
+    let sum = 0;
+    for (let i = 0; i < this.audioData.length; i++) sum += this.audioData[i];
+    return sum / (this.audioData.length * 255);
+  }
+
+  getBassEnergy() {
+    if (!this.audioData) return 0;
+    let sum = 0;
+    const end = Math.min(10, this.audioData.length);
+    for (let i = 0; i < end; i++) sum += this.audioData[i];
+    return sum / (end * 255);
+  }
+
+  getHighEnergy() {
+    if (!this.audioData) return 0;
+    let sum = 0;
+    const start = Math.floor(this.audioData.length * 0.6);
+    for (let i = start; i < this.audioData.length; i++) sum += this.audioData[i];
+    return sum / ((this.audioData.length - start) * 255);
+  }
+
+  start() {
+    this.resize();
+    this.initParticles();
+    const loop = () => {
+      this.render();
+      this.animId = requestAnimationFrame(loop);
+    };
+    loop();
+  }
+
+  stop() {
+    if (this.animId) cancelAnimationFrame(this.animId);
+    this.animId = null;
+  }
+
+  render() {
+    this.time += 0.016;
+    const ctx = this.ctx;
+    const w = this.w;
+    const h = this.h;
+    const energy = this.getAudioEnergy();
+    const bass = this.getBassEnergy();
+    const high = this.getHighEnergy();
+
+    // Background
+    ctx.fillStyle = this.colors?.bg || '#050510';
+    ctx.fillRect(0, 0, w, h);
+
+    switch (this.mode) {
+      case 'nebula': this.renderNebula(ctx, w, h, energy, bass, high); break;
+      case 'rain': this.renderRain(ctx, w, h, energy, bass, high); break;
+      case 'forest': this.renderForest(ctx, w, h, energy, bass, high); break;
+      case 'grid': this.renderGrid(ctx, w, h, energy, bass, high); break;
+      case 'ocean': this.renderOcean(ctx, w, h, energy, bass, high); break;
+      case 'particles': this.renderParticlesMode(ctx, w, h, energy, bass, high); break;
+      default: this.renderNebula(ctx, w, h, energy, bass, high);
+    }
+
+    // Waveform overlay (subtle)
+    if (this.waveformData) {
+      ctx.beginPath();
+      ctx.strokeStyle = (this.colors?.primary || '#ffffff') + '20';
+      ctx.lineWidth = 1;
+      const sliceWidth = w / this.waveformData.length;
+      let x = 0;
+      for (let i = 0; i < this.waveformData.length; i++) {
+        const v = this.waveformData[i] / 128.0;
+        const y = (v * h) / 2;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+        x += sliceWidth;
+      }
+      ctx.stroke();
+    }
+  }
+
+  renderNebula(ctx, w, h, energy, bass, high) {
+    // Nebula clouds
+    const c1 = this.colors?.primary || '#4a6cf7';
+    const c2 = this.colors?.secondary || '#8b5cf6';
+
+    for (let i = 0; i < 3; i++) {
+      const cx = w * (0.3 + i * 0.2) + Math.sin(this.time * 0.1 + i) * 50;
+      const cy = h * (0.4 + Math.sin(this.time * 0.05 + i * 2) * 0.1);
+      const r = 100 + energy * 200 + bass * 100;
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+      grad.addColorStop(0, (i % 2 === 0 ? c1 : c2) + '15');
+      grad.addColorStop(1, 'transparent');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+    }
+
+    // Stars / particles
+    this.particles.forEach(p => {
+      p.x += p.vx + Math.sin(this.time + p.phase) * 0.1;
+      p.y += p.vy + Math.cos(this.time + p.phase) * 0.1;
+      p.size = p.baseSize + energy * 3 + Math.sin(this.time * p.pulseSpeed * 60 + p.phase) * 1;
+      if (p.x < -10) p.x = w + 10;
+      if (p.x > w + 10) p.x = -10;
+      if (p.y < -10) p.y = h + 10;
+      if (p.y > h + 10) p.y = -10;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.max(0.5, p.size), 0, Math.PI * 2);
+      ctx.fillStyle = p.color + Math.floor(p.opacity * 255).toString(16).padStart(2, '0');
+      ctx.fill();
+    });
+  }
+
+  renderRain(ctx, w, h, energy, bass, high) {
+    // City glow at bottom
+    const grad = ctx.createLinearGradient(0, h * 0.7, 0, h);
+    grad.addColorStop(0, 'transparent');
+    grad.addColorStop(1, (this.colors?.primary || '#3b82f6') + '08');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    // Raindrops
+    this.particles.forEach(p => {
+      p.x += p.vx;
+      p.y += p.vy + bass * 3;
+      if (p.y > h) {
+        p.y = -p.length;
+        p.x = Math.random() * w;
+      }
+      if (p.x < 0) p.x = w;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x + p.vx * 2, p.y + p.length);
+      ctx.strokeStyle = p.color + Math.floor(p.opacity * 255).toString(16).padStart(2, '0');
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    });
+
+    // Ripples at bottom (where drops hit)
+    if (Math.random() < 0.3 + energy) {
+      const rx = Math.random() * w;
+      const ry = h - 10 - Math.random() * 30;
+      ctx.beginPath();
+      ctx.ellipse(rx, ry, 3 + high * 10, 1.5 + high * 5, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = (this.colors?.accent || '#93c5fd') + '30';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
+  }
+
+  renderForest(ctx, w, h, energy, bass, high) {
+    // Ground gradient
+    const grad = ctx.createLinearGradient(0, h * 0.8, 0, h);
+    grad.addColorStop(0, 'transparent');
+    grad.addColorStop(1, (this.colors?.primary || '#22c55e') + '10');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    // Floating particles (fireflies)
+    this.particles.forEach(p => {
+      p.x += p.vx + Math.sin(this.time * 0.5 + p.phase) * 0.5;
+      p.y += p.vy + Math.cos(this.time * 0.3 + p.phase) * 0.3;
+      const pulse = (Math.sin(this.time * p.pulseSpeed * 60 + p.phase) + 1) * 0.5;
+      p.size = p.baseSize * (0.5 + pulse * 0.5 + energy);
+      if (p.x < -10) p.x = w + 10;
+      if (p.x > w + 10) p.x = -10;
+      if (p.y < -10) p.y = h + 10;
+      if (p.y > h + 10) p.y = -10;
+
+      // Glow
+      const glowR = p.size * 4;
+      const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glowR);
+      glow.addColorStop(0, p.color + Math.floor(pulse * 80).toString(16).padStart(2, '0'));
+      glow.addColorStop(1, 'transparent');
+      ctx.fillStyle = glow;
+      ctx.fillRect(p.x - glowR, p.y - glowR, glowR * 2, glowR * 2);
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.max(0.5, p.size), 0, Math.PI * 2);
+      ctx.fillStyle = p.color + Math.floor((0.3 + pulse * 0.7) * 255).toString(16).padStart(2, '0');
+      ctx.fill();
+    });
+  }
+
+  renderGrid(ctx, w, h, energy, bass, high) {
+    // Perspective grid
+    const vanishY = h * 0.35;
+    const gridColor = this.colors?.primary || '#f43f5e';
+
+    // Horizontal scan lines
+    this.gridLines.forEach(line => {
+      line.y += line.speed + bass * 2;
+      if (line.y > h) line.y = vanishY;
+      const progress = (line.y - vanishY) / (h - vanishY);
+      ctx.beginPath();
+      ctx.moveTo(0, line.y);
+      ctx.lineTo(w, line.y);
+      ctx.strokeStyle = gridColor + Math.floor(line.opacity * progress * 255).toString(16).padStart(2, '0');
+      ctx.lineWidth = 0.5 + progress;
+      ctx.stroke();
+    });
+
+    // Vertical converging lines
+    const numVertical = 15;
+    for (let i = 0; i <= numVertical; i++) {
+      const x = (w / numVertical) * i;
+      const centerX = w / 2;
+      ctx.beginPath();
+      ctx.moveTo(centerX + (x - centerX) * 0.1, vanishY);
+      ctx.lineTo(x, h);
+      ctx.strokeStyle = gridColor + '15';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
+
+    // Neon glow on horizon
+    const glowGrad = ctx.createLinearGradient(0, vanishY - 50, 0, vanishY + 50);
+    glowGrad.addColorStop(0, 'transparent');
+    glowGrad.addColorStop(0.5, gridColor + Math.floor(20 + energy * 40).toString(16).padStart(2, '0'));
+    glowGrad.addColorStop(1, 'transparent');
+    ctx.fillStyle = glowGrad;
+    ctx.fillRect(0, vanishY - 50, w, 100);
+
+    // Floating particles above horizon (city lights)
+    this.particles.forEach(p => {
+      p.y = Math.min(p.y, vanishY - 5);
+      p.x += p.vx;
+      const pulse = Math.sin(this.time * 2 + p.phase);
+      p.size = p.baseSize * (0.5 + pulse * 0.3 + energy * 0.5);
+      if (p.x < -10) p.x = w + 10;
+      if (p.x > w + 10) p.x = -10;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.max(0.5, p.size), 0, Math.PI * 2);
+      ctx.fillStyle = p.color + Math.floor(p.opacity * 255).toString(16).padStart(2, '0');
+      ctx.fill();
+    });
+  }
+
+  renderOcean(ctx, w, h, energy, bass, high) {
+    // Depth gradient
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, '#020a14');
+    grad.addColorStop(1, '#000510');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    // Light rays from above
+    for (let i = 0; i < 5; i++) {
+      const x = w * (0.15 + i * 0.18) + Math.sin(this.time * 0.1 + i) * 30;
+      const rayW = 30 + energy * 50;
+      const rayGrad = ctx.createLinearGradient(0, 0, 0, h * 0.6);
+      rayGrad.addColorStop(0, (this.colors?.accent || '#67e8f9') + '08');
+      rayGrad.addColorStop(1, 'transparent');
+      ctx.beginPath();
+      ctx.moveTo(x - rayW / 2, 0);
+      ctx.lineTo(x - rayW * 1.5, h * 0.6);
+      ctx.lineTo(x + rayW * 1.5, h * 0.6);
+      ctx.lineTo(x + rayW / 2, 0);
+      ctx.closePath();
+      ctx.fillStyle = rayGrad;
+      ctx.fill();
+    }
+
+    // Bioluminescent particles
+    this.particles.forEach(p => {
+      p.x += p.vx + Math.sin(this.time * 0.3 + p.phase) * 0.3;
+      p.y += p.vy + Math.sin(this.time * 0.2 + p.phase * 2) * 0.2;
+      const pulse = (Math.sin(this.time * p.pulseSpeed * 40 + p.phase) + 1) * 0.5;
+      p.size = p.baseSize * (0.3 + pulse * 0.7 + high * 2);
+      if (p.x < -10) p.x = w + 10;
+      if (p.x > w + 10) p.x = -10;
+      if (p.y < -10) p.y = h + 10;
+      if (p.y > h + 10) p.y = -10;
+
+      const glowR = p.size * 6;
+      const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glowR);
+      glow.addColorStop(0, p.color + Math.floor(pulse * 50).toString(16).padStart(2, '0'));
+      glow.addColorStop(1, 'transparent');
+      ctx.fillStyle = glow;
+      ctx.fillRect(p.x - glowR, p.y - glowR, glowR * 2, glowR * 2);
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.max(0.5, p.size), 0, Math.PI * 2);
+      ctx.fillStyle = p.color + Math.floor((0.2 + pulse * 0.8) * 255).toString(16).padStart(2, '0');
+      ctx.fill();
+    });
+  }
+
+  renderParticlesMode(ctx, w, h, energy, bass, high) {
+    // Warm glow at center
+    const cx = w / 2 + Math.sin(this.time * 0.1) * 50;
+    const cy = h / 2 + Math.cos(this.time * 0.08) * 30;
+    const r = 150 + energy * 100;
+    const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    glow.addColorStop(0, (this.colors?.primary || '#d97706') + '10');
+    glow.addColorStop(1, 'transparent');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, w, h);
+
+    // Floating dust particles
+    this.particles.forEach(p => {
+      p.x += p.vx + Math.sin(this.time * 0.2 + p.phase) * 0.2;
+      p.y += p.vy - 0.1; // slight upward drift (warmth)
+      const pulse = (Math.sin(this.time * p.pulseSpeed * 30 + p.phase) + 1) * 0.5;
+      p.size = p.baseSize * (0.5 + pulse * 0.3 + energy * 0.3);
+      if (p.x < -10) p.x = w + 10;
+      if (p.x > w + 10) p.x = -10;
+      if (p.y < -10) p.y = h + 10;
+      if (p.y > h + 10) p.y = -10;
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.max(0.5, p.size), 0, Math.PI * 2);
+      ctx.fillStyle = p.color + Math.floor((0.2 + pulse * 0.5) * 255).toString(16).padStart(2, '0');
+      ctx.fill();
+    });
+
+    // Connection lines between close particles (warm web)
+    for (let i = 0; i < this.particles.length; i++) {
+      for (let j = i + 1; j < this.particles.length; j++) {
+        const dx = this.particles[i].x - this.particles[j].x;
+        const dy = this.particles[i].y - this.particles[j].y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 80) {
+          ctx.beginPath();
+          ctx.moveTo(this.particles[i].x, this.particles[i].y);
+          ctx.lineTo(this.particles[j].x, this.particles[j].y);
+          const alpha = Math.floor((1 - dist / 80) * 30).toString(16).padStart(2, '0');
+          ctx.strokeStyle = (this.colors?.secondary || '#f59e0b') + alpha;
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+        }
+      }
+    }
+  }
+}
+
+// === INLINE: ui.js ===
+// === UI CONTROLLER ===
+// Manages the interface, biome switching, controls
+
+class SoundscapeApp {
+  constructor() {
+    this.engine = new AudioEngine();
+    this.visual = null;
+    this.currentBiome = null;
+    this.isPlaying = false;
+    this.elapsedSeconds = 0;
+    this.timerInterval = null;
+  }
+
+  async init() {
+    // Canvas
+    const canvas = document.getElementById('visualCanvas');
+    this.visual = new VisualRenderer(canvas);
+
+    // Biome buttons
+    Object.entries(BIOMES).forEach(([key, biome]) => {
+      const btn = document.getElementById(`biome-${key}`);
+      if (btn) {
+        btn.addEventListener('click', () => this.selectBiome(key));
+      }
+    });
+
+    // Play button
+    document.getElementById('playBtn').addEventListener('click', () => this.togglePlay());
+
+    // Volume slider
+    const volSlider = document.getElementById('volumeSlider');
+    volSlider.addEventListener('input', (e) => {
+      const val = e.target.value / 100;
+      this.engine.setVolume(val);
+      document.getElementById('volumeValue').textContent = e.target.value + '%';
+    });
+
+    // Intensity slider
+    const intSlider = document.getElementById('intensitySlider');
+    intSlider.addEventListener('input', (e) => {
+      const val = e.target.value / 100;
+      this.engine.setIntensity(val);
+      document.getElementById('intensityValue').textContent = e.target.value + '%';
+    });
+
+    // Resize handler
+    window.addEventListener('resize', () => {
+      if (this.visual) this.visual.resize();
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') { e.preventDefault(); this.togglePlay(); }
+      if (e.key === 'm') { this.toggleMute(); }
+      const biomeKeys = Object.keys(BIOMES);
+      const num = parseInt(e.key);
+      if (num >= 1 && num <= biomeKeys.length) {
+        this.selectBiome(biomeKeys[num - 1]);
+      }
+    });
+
+    // Select first biome by default
+    this.selectBiome('deepSpace');
+  }
+
+  async selectBiome(key) {
+    const biome = BIOMES[key];
+    if (!biome) return;
+
+    const wasPlaying = this.isPlaying;
+
+    // Stop current
+    if (this.isPlaying) {
+      await this.stopPlayback();
+    }
+
+    this.currentBiome = key;
+
+    // Update UI — active state
+    document.querySelectorAll('.biome-btn').forEach(btn => btn.classList.remove('active'));
+    const activeBtn = document.getElementById(`biome-${key}`);
+    if (activeBtn) activeBtn.classList.add('active');
+
+    // Update description
+    document.getElementById('biomeTitle').textContent = biome.icon + ' ' + biome.name;
+    document.getElementById('biomeDesc').textContent = biome.description;
+
+    // Update colors
+    document.documentElement.style.setProperty('--color-primary', biome.colors.primary);
+    document.documentElement.style.setProperty('--color-secondary', biome.colors.secondary);
+    document.documentElement.style.setProperty('--color-accent', biome.colors.accent);
+    document.documentElement.style.setProperty('--color-bg', biome.colors.bg);
+
+    // Set visual mode
+    this.visual.setMode(biome.visualMode, biome.colors);
+
+    // Auto-play if was playing, or start fresh
+    if (wasPlaying) {
+      await this.startPlayback();
+    } else {
+      // Start visual anyway (without audio)
+      this.visual.start();
+    }
+  }
+
+  async startPlayback() {
+    if (!this.currentBiome) return;
+
+    // Init audio engine if needed
+    if (!this.engine.ctx) {
+      await this.engine.init();
+      this.engine.setupAnalyser();
+    }
+
+    if (this.engine.ctx.state === 'suspended') {
+      await this.engine.ctx.resume();
+    }
+
+    this.engine.isPlaying = true;
+    this.engine._timeouts = [];
+    this.isPlaying = true;
+
+    // Fade in master
+    this.engine.master.gain.setValueAtTime(0, this.engine.ctx.currentTime);
+    const targetVol = document.getElementById('volumeSlider').value / 100;
+    this.engine.master.gain.linearRampToValueAtTime(targetVol, this.engine.ctx.currentTime + 2);
+
+    // Set intensity
+    this.engine.setIntensity(document.getElementById('intensitySlider').value / 100);
+
+    // Start biome
+    BIOMES[this.currentBiome].setup(this.engine);
+
+    // Start visuals
+    this.visual.start();
+
+    // Audio → visual bridge
+    this.visualLoop();
+
+    // Timer
+    this.startTimer();
+
+    // Update UI
+    document.getElementById('playBtn').innerHTML = '<span class="play-icon">⏸</span>';
+    document.getElementById('playBtn').classList.add('playing');
+    document.getElementById('status').textContent = 'Playing';
+  }
+
+  async stopPlayback() {
+    this.engine.stop();
+    this.isPlaying = false;
+
+    // Stop timer
+    this.stopTimer();
+
+    // Update UI
+    document.getElementById('playBtn').innerHTML = '<span class="play-icon">▶</span>';
+    document.getElementById('playBtn').classList.remove('playing');
+    document.getElementById('status').textContent = 'Paused';
+  }
+
+  async togglePlay() {
+    if (this.isPlaying) {
+      await this.stopPlayback();
+    } else {
+      await this.startPlayback();
+    }
+  }
+
+  toggleMute() {
+    const slider = document.getElementById('volumeSlider');
+    if (parseInt(slider.value) > 0) {
+      this._savedVolume = slider.value;
+      slider.value = 0;
+      this.engine.setVolume(0);
+      document.getElementById('volumeValue').textContent = '0%';
+    } else {
+      slider.value = this._savedVolume || 70;
+      this.engine.setVolume(slider.value / 100);
+      document.getElementById('volumeValue').textContent = slider.value + '%';
+    }
+  }
+
+  visualLoop() {
+    if (!this.isPlaying) return;
+    const freqData = this.engine.getAnalyserData();
+    const waveData = this.engine.getWaveformData();
+    if (freqData) this.visual.updateAudio(freqData, waveData);
+    requestAnimationFrame(() => this.visualLoop());
+  }
+
+  startTimer() {
+    this.timerInterval = setInterval(() => {
+      this.elapsedSeconds++;
+      const m = Math.floor(this.elapsedSeconds / 60);
+      const s = this.elapsedSeconds % 60;
+      document.getElementById('timer').textContent =
+        String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+    }, 1000);
+  }
+
+  stopTimer() {
+    if (this.timerInterval) clearInterval(this.timerInterval);
+  }
+}
+
+// Boot
+window.addEventListener('DOMContentLoaded', () => {
+  const app = new SoundscapeApp();
+  app.init();
+});
+</script>
+
+</body>
+</html>
